@@ -21,6 +21,7 @@
 
 #include "pvr.h"
 #include "romfont.h"
+#include "maple.h"
 
 #define SCREEN_WIDTH 640
 #define SCREEN_HEIGHT 480
@@ -84,9 +85,6 @@ extern unsigned volatile ticks;
 #define VRAM_REL(addr) (((unsigned)(addr)) & 0x00ffffff)
 
 void *_get_romfont_pointer(void);
-
-static unsigned get_controller_buttons(void);
-static int check_controller(void);
 
 static void volatile *cur_framebuffer;
 static void configure_video(void) {
@@ -156,7 +154,7 @@ int dcmain(int argc, char **argv) {
     static unsigned short font[288 * 24 * 12];
     create_font(font, make_color(255, 255, 255), make_color(0, 0, 0));
     configure_video();
-    for (;;) {
+    while (!((~get_controller_buttons()) & (1 << 3))) {
         clear_screen(cur_framebuffer, make_color(0, 0, 0));
         blitstring(cur_framebuffer, SCREEN_WIDTH, SCREEN_WIDTH, SCREEN_HEIGHT,
                    font, "i hate my fucking life", 8, 8);

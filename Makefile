@@ -29,20 +29,22 @@ TARGET=stopwatch.elf
 all: $(TARGET)
 
 clean:
-	rm -f $(TARGET) init.o stopwatch.o romfont.o
+	rm -f $(TARGET) init.o stopwatch.o romfont.o maple.o
 
 init.o: init.s
 	$(AS) -little -o init.o init.s
 
-$(TARGET): init.o stopwatch.o romfont.o
+$(TARGET): init.o stopwatch.o romfont.o maple.o
 	$(CC) -Wl,-e_start,-Ttext,0x8c010000 $^ -o $(TARGET) -nostartfiles -nostdlib -lgcc
 
-stopwatch.o: stopwatch.c pvr.h tmu.h romfont.h
+stopwatch.o: stopwatch.c pvr.h tmu.h romfont.h maple.h
 	$(CC) -c $< -nostartfiles -nostdlib
 
 romfont.o: romfont.c romfont.h
 	$(CC) -c $< -nostartfiles -nostdlib
 
+maple.o: maple.c maple.h
+	$(CC) -c $< -nostartfiles -nostdlib
 
 run: $(TARGET)
 	washingtondc -c test -- $<
