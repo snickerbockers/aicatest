@@ -22,6 +22,7 @@
 #include "pvr.h"
 #include "romfont.h"
 #include "maple.h"
+#include "tmu.h"
 
 #define SCREEN_WIDTH 640
 #define SCREEN_HEIGHT 480
@@ -150,14 +151,45 @@ static void swap_buffers(void) {
     }
 }
 
+static char const *hexstr(unsigned val) {
+    static char txt[32];
+    unsigned nib_no;
+    for (nib_no = 0; nib_no < 8; nib_no++) {
+        unsigned shift_amt = (7 - nib_no) * 4;
+        unsigned nibble = (val >> shift_amt) & 0xf;
+        static char const tbl[16] = {
+            '0', '1', '2', '3',
+            '4', '5', '6', '7',
+            '8', '9', 'A', 'B',
+            'C', 'D', 'E', 'F'
+        };
+        txt[nib_no] = tbl[nibble];
+    }
+    txt[8] = '\0';
+    return txt;
+}
+
+#define SH4_IPR ((unsigned short volatile*)0xffd00004)
+
 int dcmain(int argc, char **argv) {
     static unsigned short font[288 * 24 * 12];
     create_font(font, make_color(255, 255, 255), make_color(0, 0, 0));
     configure_video();
+
+    // initialize TMU
+    *TMU_TSTR = 0; // disable TMU
+    *TMU_TCR0 = TMU_TCR_50_KHZ | TMU_TCR_UNIE;
+    *TMU_TCOR0 = 49;
+    *TMU_TCNT0 = 49;
+    SH4_IPR[0] = 0xf000;       // set TMU interrupts to highest priority
+    *TMU_TSTR = TMU_TSTR_STR0; //re-enable TMU
+
     while (!((~get_controller_buttons()) & (1 << 3))) {
         clear_screen(cur_framebuffer, make_color(0, 0, 0));
-        blitstring(cur_framebuffer, SCREEN_WIDTH, SCREEN_WIDTH, SCREEN_HEIGHT,
-                   font, "i hate my fucking life", 8, 8);
+        blitstring_centered(cur_framebuffer, SCREEN_WIDTH, SCREEN_WIDTH, SCREEN_HEIGHT,
+                            font, "i hate my fucking life", 8);
+        blitstring_centered(cur_framebuffer, SCREEN_WIDTH, SCREEN_WIDTH, SCREEN_HEIGHT,
+                            font, hexstr(ticks/1000), 9);
         while (!check_vblank())
             ;
         swap_buffers();

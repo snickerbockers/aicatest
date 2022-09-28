@@ -143,3 +143,19 @@ void blitstring(void volatile *fb, unsigned linestride_pixels,
         blit_char(fb, linestride_pixels, xclip, yclip, font, *msg++, row, col++);
     }
 }
+
+static unsigned romfont_strlen(char const *str) {
+    unsigned len = 0;
+    while (*str++)
+        len++;
+    return len;
+}
+
+void blitstring_centered(void volatile *fb, unsigned linestride_pixels,
+                         unsigned xclip, unsigned yclip,
+                         unsigned short const *font, char const *msg,
+                         unsigned row) {
+    unsigned n_columns = xclip / GLYPH_WIDTH;
+    unsigned len = romfont_strlen(msg);
+    blitstring(fb, linestride_pixels, xclip, yclip, font, msg, row, (n_columns - len) / 2);
+}

@@ -53,4 +53,9 @@ void blitstring(void volatile *fb, unsigned linestride_pixels,
                 unsigned short const *font, char const *msg,
                 unsigned row, unsigned col);
 
+void blitstring_centered(void volatile *fb, unsigned linestride_pixels,
+                         unsigned xclip, unsigned yclip,
+                         unsigned short const *font, char const *msg,
+                         unsigned row);
+
 #endif
