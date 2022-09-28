@@ -45,7 +45,7 @@ void wait_maple(void) {
            ;
 
     // clear the interrupt
-    ISTNRM |= (1 << 12);
+    ISTNRM = (1 << 12);
 }
 
 int check_controller(void) {
