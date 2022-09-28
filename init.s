@@ -282,10 +282,13 @@ tmu_tuni0:
     mova _ticks, r0
     mov.l @r0, r1
     add #1, r1
-    rte
     mov.l r1, @r0
 
+    rte
+    nop
+
     .align 4
+
 _ticks:
     .long 0
 tcr0p:
