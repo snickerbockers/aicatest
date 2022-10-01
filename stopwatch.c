@@ -169,6 +169,42 @@ static char const *hexstr(unsigned val) {
     return txt;
 }
 
+static char const *itoa(int val) {
+    static char buf[32];
+
+    int idx;
+    for (idx = 0; idx < 32; idx++)
+        buf[idx] = '\0';
+
+    int buflen = 0;
+    if (val < 0) {
+        buf[0] = '-';
+        buflen++;
+        val = -val;
+    } else if (val == 0) {
+        return "0";
+    }
+
+    int leading = 1;
+    val &= 0xffffffff; // in case sizeof(int) > 4
+    int power = 1000000000; // billion
+    while (power > 0) {
+        if (buflen >= sizeof(buf)) {
+            buf[sizeof(buf) - 1] = '\0';
+            break;
+        }
+        int digit = val / power;
+        if (!(digit == 0 && leading))
+            buf[buflen++] = digit + '0';
+        if (digit != 0)
+            leading = 0;
+        val = val % power;
+        power /= 10;
+    }
+
+    return buf;
+}
+
 #define SH4_IPR ((unsigned short volatile*)0xffd00004)
 
 int dcmain(int argc, char **argv) {
@@ -182,16 +218,42 @@ int dcmain(int argc, char **argv) {
     *TMU_TCOR0 = 49;
     *TMU_TCNT0 = 49;
     SH4_IPR[0] = 0xf000;       // set TMU interrupts to highest priority
-    *TMU_TSTR = TMU_TSTR_STR0; //re-enable TMU
+    /* *TMU_TSTR = TMU_TSTR_STR0; //re-enable TMU */
 
-    while (!((~get_controller_buttons()) & (1 << 3))) {
+    int btns, btns_prev = 0;
+    int paused = 1;
+    while (!((btns = ~get_controller_buttons()) & (1 << 3))) {
+        if (btns & (1 << 2) && !(btns_prev & (1 << 2))) {
+            // A button
+            *TMU_TSTR ^= TMU_TSTR_STR0;
+            paused = !paused;
+        }
+        if (btns & (1 << 1) && !(btns_prev & (1 << 1))) {
+            // B button - reset the timer and pause
+            paused = 1;
+            *TMU_TSTR = 0;
+            *TMU_TCOR0 = 49;
+            *TMU_TCNT0 = 49;
+            ticks = 0;
+        }
+
         clear_screen(cur_framebuffer, make_color(0, 0, 0));
+        if (paused) {
+            blitstring_centered(cur_framebuffer, SCREEN_WIDTH, SCREEN_WIDTH, SCREEN_HEIGHT,
+                                font, "A: START TIMER", 7);
+        } else {
+            blitstring_centered(cur_framebuffer, SCREEN_WIDTH, SCREEN_WIDTH, SCREEN_HEIGHT,
+                                font, "A: PAUSE TIMER", 7);
+        }
         blitstring_centered(cur_framebuffer, SCREEN_WIDTH, SCREEN_WIDTH, SCREEN_HEIGHT,
-                            font, "i hate my fucking life", 8);
+                            font, "B: RESET TIMER TO 0", 8);
         blitstring_centered(cur_framebuffer, SCREEN_WIDTH, SCREEN_WIDTH, SCREEN_HEIGHT,
-                            font, hexstr(ticks/1000), 9);
+                            font, itoa(ticks/1000), 9);
+        blitstring_centered(cur_framebuffer, SCREEN_WIDTH, SCREEN_WIDTH, SCREEN_HEIGHT,
+                            font, "PRESS START TO EXIT TO BOOTLOADER", TEXT_ROWS - 2);
         while (!check_vblank())
             ;
         swap_buffers();
+        btns_prev = btns;
     }
 }
