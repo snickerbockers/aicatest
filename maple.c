@@ -34,10 +34,8 @@
 #define MAKE_PHYS(addr) ((void*)((((unsigned)(addr)) & 0x1fffffff) | 0xa0000000))
 
 static void volatile *align32(void volatile *inp) {
-    char volatile *as_ch = (char volatile*)inp;
-    while (((unsigned)as_ch) & 31)
-        as_ch++;
-    return (void volatile*)as_ch;
+    unsigned uptr = (unsigned)inp;
+    return (void volatile*)(32 * ((uptr + 31) / 32));
 }
 
 void wait_maple(void) {
