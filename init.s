@@ -59,7 +59,13 @@ _start:
     mov.l r9, @-r0
     mov.l r8, @-r0
 
-	! put a pointer to the top of the stack in r15
+    ! clear the rb bit from sr
+    stc sr, r8
+    mov.l clear_rb_mask, r9
+    and r9, r8
+    ldc r8, sr
+
+    ! put a pointer to the top of the stack in r15
 	mov.l stack_top_addr, r15
 
     ! get a cache-free pointer to configure_cache (OR with 0xa0000000)
@@ -140,6 +146,8 @@ ticksp:
     .long _ticks
 bl_mask:
     .long 1 << 28
+clear_rb_mask:
+    .long ~(1<<29)
 vbr_val:
     .long vbr_addr
 orig_r8:
