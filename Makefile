@@ -22,20 +22,26 @@
 AS=sh-elf-as
 LD=sh-elf-ld
 CC=sh-elf-gcc
-TARGET=stopwatch.elf
+OBJCOPY=sh-elf-objcopy
+SCRAMBLE=scramble
+MAKEIP=$(HOME)/src/makeip/makeip
+CDI4DC=cdi4dc
+
+ELF=stopwatch.elf
+TARGET=stopwatch.cdi
 
 .PHONY: run all
 
 all: $(TARGET)
 
 clean:
-	rm -f $(TARGET) init.o stopwatch.o romfont.o maple.o
+	rm -f $(ELF) init.o stopwatch.o romfont.o maple.o
 
 init.o: init.s
 	$(AS) -little -o init.o init.s
 
-$(TARGET): init.o stopwatch.o romfont.o maple.o
-	$(CC) -Wl,-e_start,-Ttext,0x8c010000 $^ -o $(TARGET) -nostartfiles -nostdlib -lgcc
+$(ELF): init.o stopwatch.o romfont.o maple.o
+	$(CC) -Wl,-e_start,-Ttext,0x8c010000 $^ -o $(ELF) -nostartfiles -nostdlib -lgcc
 
 stopwatch.o: stopwatch.c pvr.h tmu.h romfont.h maple.h
 	$(CC) -c $< -nostartfiles -nostdlib
@@ -48,3 +54,20 @@ maple.o: maple.c maple.h
 
 run: $(TARGET)
 	washingtondc -c test -- $<
+
+1st_read.bin.unscrambled: $(ELF)
+	$(OBJCOPY) -R .stack -O binary $< $@
+
+isodir/1st_read.bin: 1st_read.bin.unscrambled
+	mkdir -p isodir
+	$(SCRAMBLE) $< $@
+
+filesystem.iso: isodir/1st_read.bin IP.BIN $(shell find isodir)
+	mkisofs -G IP.BIN -C 0,11702 -o $@ isodir
+
+IP.BIN:
+	$(MAKEIP) ./ip.txt ./IP.BIN
+
+$(TARGET): filesystem.iso
+	$(CDI4DC) $< $@
+
