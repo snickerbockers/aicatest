@@ -19,31 +19,31 @@
 #
 ################################################################################
 
-AS=sh-elf-as
-LD=sh-elf-ld
-CC=sh-elf-gcc
-OBJCOPY=sh-elf-objcopy
+AS=sh4-elf-as
+LD=sh4-elf-ld
+CC=sh4-elf-gcc
+OBJCOPY=sh4-elf-objcopy
 SCRAMBLE=scramble
-MAKEIP=$(HOME)/src/makeip/makeip
+MAKEIP=makeip
 CDI4DC=cdi4dc
 
-ELF=stopwatch.elf
-TARGET=stopwatch.cdi
+ELF=aica_test.elf
+TARGET=aica_test.cdi
 
 .PHONY: run all
 
 all: $(TARGET)
 
 clean:
-	rm -f $(ELF) init.o stopwatch.o romfont.o maple.o
+	rm -f $(ELF) init.o main.o romfont.o maple.o
 
 init.o: init.s
 	$(AS) -little -o init.o init.s
 
-$(ELF): init.o stopwatch.o romfont.o maple.o
+$(ELF): init.o main.o romfont.o maple.o
 	$(CC) -Wl,-e_start,-Ttext,0x8c010000 $^ -o $(ELF) -nostartfiles -nostdlib -lgcc
 
-stopwatch.o: stopwatch.c pvr.h tmu.h romfont.h maple.h
+main.o: main.c pvr.h tmu.h romfont.h maple.h
 	$(CC) -c $< -nostartfiles -nostdlib
 
 romfont.o: romfont.c romfont.h
