@@ -1,7 +1,4 @@
-this is going to be a simple stopwatch application.
+extremely incomplete hardware test suite for SEGA Dreamcast's AICA
 
-that's all it is, there's nothing interesting here.
-
-the main draw is that it doesn't use KallistiOS, i'm doing everything
-from scratch here.  other than that, it's just a stopwatch on the sega
-dreamcast.
+forked from another project of mine so i can copy over the boilerplate
+code, so most of this is unrelated to AICA so far
