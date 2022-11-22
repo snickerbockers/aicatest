@@ -23,6 +23,11 @@
 #include "romfont.h"
 #include "maple.h"
 #include "tmu.h"
+#include "memory.h"
+
+#ifndef NULL
+#define NULL 0x0
+#endif
 
 #define SCREEN_WIDTH 640
 #define SCREEN_HEIGHT 480
@@ -207,9 +212,183 @@ static char const *itoa(int val) {
 
 #define SH4_IPR ((unsigned short volatile*)0xffd00004)
 
+#define AICA_CHAN(chan) ((unsigned volatile*)(0xa0700000 + 0x80 * (chan)))
+
+#define PLAY_CTRL 0
+#define SAMPLE_ADDR_LOW 1
+#define LOOP_START 2
+#define LOOP_END 3
+#define AMPENV1 4
+#define AMPENV2 5
+#define SAMPLE_RATE_PITCH 6
+#define DIRECT_PAN_VOL_SEND 9
+#define LPF1_VOLUME 10
+
+#define AICA_SAMPLE_ADDR 0x11000
+#define SH4_SAMPLE_ADDR (AICA_SAMPLE_ADDR + 0xa0800000)
+
+#define FFST (*(unsigned volatile*)0xa05f688c)
+
+/*
+SH4 write 4 bytes to a0700000 <CHAN_0_PLAY_CONTROL> in units of 4
+	00008000
+SH4 write 4 bytes to a0700014 <CHAN_0_AMP_ENV_2> in units of 4
+	0000001f
+SH4 write 4 bytes to a0700000 <CHAN_0_PLAY_CONTROL> in units of 4
+	00008000
+SH4 write 4 bytes to a0700014 <CHAN_0_AMP_ENV_2> in units of 4
+	0000001f
+SH4 write 4 bytes to a0700000 <CHAN_0_PLAY_CONTROL> in units of 4
+	00008000
+SH4 write 4 bytes to a0700014 <CHAN_0_AMP_ENV_2> in units of 4
+	0000001f
+SH4 write 4 bytes to a0700000 <CHAN_0_PLAY_CONTROL> in units of 4
+	00008000
+SH4 write 4 bytes to a0700014 <CHAN_0_AMP_ENV_2> in units of 4
+	0000001f
+SH4 write 4096 bytes to a0811000 <AICA MEMORY> in units of 4
+SH4 write 4 bytes to a0700000 <CHAN_0_PLAY_CONTROL> in units of 4
+	00008000
+SH4 write 8 bytes to a0700008 <CHAN_0_LOOP_START> in units of 4
+	00000000
+	00001000
+SH4 write 4 bytes to a0700018 <CHAN_0_SAMPLE_RATE_PITCH> in units of 4
+	00000000
+SH4 write 8 bytes to a0700024 <CHAN_0_DIRECT_PAN_VOL_SEND> in units of 4
+	00000f00
+	00000024
+SH4 write 4 bytes to a0700010 <CHAN_0_AMP_ENV_1> in units of 4
+	0000001f
+SH4 write 4 bytes to a0700004 <CHAN_0_SAMPLE_ADDR_LOW> in units of 4
+	00001000
+SH4 write 4 bytes to a0700000 <CHAN_0_PLAY_CONTROL> in units of 4
+	0000c201
+*/
+
+static unsigned master_vol = 15;
+
+#define AICA_SYS_REG(offs) (*((unsigned volatile*)(0xa0700000+(offs))))
+
+#define MASTER_VOL AICA_SYS_REG(0x2800)
+#define CHAN_INFO_REQ AICA_SYS_REG(0x280c)
+#define PLAY_STATUS AICA_SYS_REG(0x2810)
+
+#define SUSTAIN_RATE 0
+#define DECAY_RATE 1
+#define ATTACK_RATE 2
+#define RELEASE_RATE 3
+#define DECAY_LEVEL 4
+#define N_RATES 5
+
+
+void playtone(unsigned const rates[N_RATES]) {
+#define TONE_FREQ 400
+#define N_SAMPLES (44100 / TONE_FREQ)
+#include "samples.h"
+
+    // set mastervolume
+    MASTER_VOL = master_vol <= 15 ? master_vol : 15;
+
+    static unsigned short volatile *samplep = (unsigned short volatile*)SH4_SAMPLE_ADDR;
+    memcpy(samplep, samples, sizeof(samples));
+
+    /* for (unsigned sampleno = 0; sampleno < N_SAMPLES; sampleno++) { */
+    /*     samplep[sampleno] = 0x7fff * sin(sampleno * 2.0f * 3.1416f / N_SAMPLES); */
+    /* } */
+
+    AICA_CHAN(0)[PLAY_CTRL] = 0x8000;
+    AICA_CHAN(0)[LOOP_START] = 0;
+    AICA_CHAN(0)[LOOP_END] = N_SAMPLES;
+    AICA_CHAN(0)[SAMPLE_RATE_PITCH] = 0; // set sample-rate to 44.1 KHz
+    AICA_CHAN(0)[DIRECT_PAN_VOL_SEND] = 0xf00;
+    AICA_CHAN(0)[LPF1_VOLUME] = 0x24;
+    AICA_CHAN(0)[SAMPLE_ADDR_LOW] = AICA_SAMPLE_ADDR & 0xffff;
+
+    AICA_CHAN(0)[AMPENV1] = rates[2] | (rates[1] << 6) | (rates[0] << 11);
+    AICA_CHAN(0)[AMPENV2] = rates[3] | (rates[4] << 5) | (0xf << 10);
+
+    AICA_CHAN(0)[PLAY_CTRL] = 0xc201;
+
+    /* AICA_CHAN(0)[LOOP_START] = 0; */
+    /* AICA_CHAN(0)[LOOP_END] = N_SAMPLES; */
+    /* AICA_CHAN(0)[AMPENV1] = 0x1f; // maximum attack, minimum decay/sustain/release */
+    /* AICA_CHAN(0)[AMPENV2] = 0xf << 10; // no key-rate-scaling */
+    /* AICA_CHAN(0)[SAMPLE_RATE_PITCH] = 0; // set sample-rate to 44.1 KHz */
+    /* AICA_CHAN(0)[SAMPLE_ADDR_LOW] = AICA_SAMPLE_ADDR & 0xffff; */
+
+    /* AICA_CHAN(0)[PLAY_CTRL] = (1 << 14) | (1 << 9) | (AICA_SAMPLE_ADDR >> 16); */
+
+    /* ((volatile unsigned char *)(AICA_CHAN(0)+9))[4] = 0x24; */
+    /* ((volatile unsigned char *)(AICA_CHAN(0)+9))[1] = 0xf; */
+    /* ((volatile unsigned char *)(AICA_CHAN(0)+9))[5] = 0; */
+    /* ((volatile unsigned char *)(AICA_CHAN(0)+9))[0] = 0; */
+
+    /* AICA_CHAN(0)[PLAY_CTRL] |= (1 << 15); */
+}
+
+void silence(void) {
+    unsigned chan;
+    for (chan = 0; chan < 64; chan++)
+        AICA_CHAN(chan)[PLAY_CTRL] = 0x8000;
+}
+
+#define ARM7_RESET (*(volatile unsigned*)0xa0702c00)
+
+static void disable_arm(void) {
+    while (FFST & 0x10)
+        ;
+    ARM7_RESET |=1;
+}
+
+static void enable_arm(void) {
+    while (FFST & 0x10)
+        ;
+    ARM7_RESET &= ~1;
+}
+
+static void
+get_chan_state(unsigned ch, unsigned *statep,
+               unsigned *attenp, unsigned *loopp) {
+    CHAN_INFO_REQ = ch << 8;
+    unsigned playstat = PLAY_STATUS;
+
+    if (statep)
+        *statep = (playstat >> 13) & 3;
+
+    if (attenp)
+        *attenp = playstat & 0x1fff;
+
+    if (loopp)
+        *loopp = (playstat >> 15) & 1;
+}
+
+#include "arm7_fw.h"
+
 int dcmain(int argc, char **argv) {
-    static unsigned short font[288 * 24 * 12];
-    create_font(font, make_color(255, 255, 255), make_color(0, 0, 0));
+    unsigned rates[5] = {
+        0, 0, 0x1f, 0, 0
+    };
+
+    char const *rate_names[5] = {
+        "sustain rate",
+        "decay rate",
+        "attack rate",
+        "release rate",
+        "decay level"
+    };
+
+    unsigned cursor = 0;
+
+    disable_arm();
+    *((unsigned volatile*)0xa0800000) = 0xeafffffe;
+    /* memcpy((unsigned volatile*)0xa0800000, arm7fw, sizeof(arm7fw)); */
+
+    // awaken ARM7
+    enable_arm();
+
+    static unsigned short font[2][288 * 24 * 12];
+    create_font(font[0], make_color(255, 255, 255), make_color(0, 0, 0));
+    create_font(font[1], ~0, make_color(0, 0, 255));
     configure_video();
 
     // initialize TMU
@@ -225,35 +404,79 @@ int dcmain(int argc, char **argv) {
     while (!((btns = ~get_controller_buttons()) & (1 << 3))) {
         if (btns & (1 << 2) && !(btns_prev & (1 << 2))) {
             // A button
-            *TMU_TSTR ^= TMU_TSTR_STR0;
-            paused = !paused;
-        }
-        if (btns & (1 << 1) && !(btns_prev & (1 << 1))) {
-            // B button - reset the timer and pause
-            paused = 1;
-            *TMU_TSTR = 0;
-            *TMU_TCOR0 = 49;
-            *TMU_TCNT0 = 49;
-            ticks = 0;
+            
+            /* *TMU_TSTR ^= TMU_TSTR_STR0; */
+            /* paused = !paused; */
+            silence();
+            playtone(rates);
         }
 
-        clear_screen(cur_framebuffer, make_color(0, 0, 0));
-        if (paused) {
-            blitstring_centered(cur_framebuffer, SCREEN_WIDTH, SCREEN_WIDTH, SCREEN_HEIGHT,
-                                font, "A: START TIMER", 7);
-        } else {
-            blitstring_centered(cur_framebuffer, SCREEN_WIDTH, SCREEN_WIDTH, SCREEN_HEIGHT,
-                                font, "A: PAUSE TIMER", 7);
+        if ((btns & (1 << 7)) && !(btns_prev & (1 << 7))) {
+            // right
+            if (rates[cursor] < 0x1f)
+                rates[cursor]++;
         }
+        if ((btns & (1 << 6)) && !(btns_prev & (1 << 6))) {
+            // left
+            if (rates[cursor] > 0)
+                rates[cursor]--;
+        }
+
+        if ((btns & (1 << 4)) && !(btns_prev & (1 << 4))) {
+            // up
+            if (cursor > 0)
+                cursor--;
+        }
+        if ((btns & (1 << 5)) && !(btns_prev & (1 << 5))) {
+            // down
+            if (cursor < 4)
+                cursor++;
+        }
+
+        if (btns & (1 << 1) && !(btns_prev & (1 << 1))) {
+            // B button
+            silence();
+        }
+
+        /* if (btns & (1 << 1) && !(btns_prev & (1 << 1))) { */
+        /*     // B button - reset the timer and pause */
+        /*     paused = 1; */
+        /*     *TMU_TSTR = 0; */
+        /*     *TMU_TCOR0 = 49; */
+        /*     *TMU_TCNT0 = 49; */
+        /*     ticks = 0; */
+        /* } */
+
+        clear_screen(cur_framebuffer, make_color(0, 0, 0));
         blitstring_centered(cur_framebuffer, SCREEN_WIDTH, SCREEN_WIDTH, SCREEN_HEIGHT,
-                            font, "B: RESET TIMER TO 0", 8);
-        blitstring_centered(cur_framebuffer, SCREEN_WIDTH, SCREEN_WIDTH, SCREEN_HEIGHT,
-                            font, itoa(ticks/1000), 9);
-        blitstring_centered(cur_framebuffer, SCREEN_WIDTH, SCREEN_WIDTH, SCREEN_HEIGHT,
-                            font, "PRESS START TO EXIT TO BOOTLOADER", TEXT_ROWS - 2);
+                            font[0], "WELCOME TO AICA TEST", 3);
+        unsigned row = 4, col = 0;
+
+        unsigned atten;
+        get_chan_state(0, NULL, &atten, NULL);
+        printstr(cur_framebuffer, font[0], "attenuation: ", &row, &col);
+        printstr(cur_framebuffer, font[0], hexstr(atten), &row, &col);
+
+        unsigned rateno;
+        for (rateno = 0; rateno < 5; rateno++) {
+            unsigned short *cur_font = (rateno == cursor ? font[1] : font[0]);
+            row++;
+            col = 4;
+            printstr(cur_framebuffer, font[0], rate_names[rateno], &row, &col);
+            printstr(cur_framebuffer, font[0], ": ", &row, &col);
+            col = MAX_CHARS_X - 12;
+            printstr(cur_framebuffer, cur_font, hexstr(rates[rateno]), &row, &col);
+        }
+
+        /* printstr(cur_framebuffer, font, "MASTER VOLUME: ", &row, &col); */
+        /* printstr(cur_framebuffer, font, hexstr(master_vol), &row, &col); */
+
+
         while (!check_vblank())
             ;
         swap_buffers();
         btns_prev = btns;
     }
+    silence();
+    return 0;
 }

@@ -32,6 +32,9 @@
 
 #define N_GLYPH 288
 
+#define MAX_CHARS_X (FRAMEBUFFER_WIDTH / 12)
+#define MAX_CHARS_Y (FRAMEBUFFER_HEIGHT / 24)
+
 void *get_romfont_pointer(void);
 
 void glyph_uv(unsigned glyph, float uv[4]);
@@ -57,5 +60,10 @@ void blitstring_centered(void volatile *fb, unsigned linestride_pixels,
                          unsigned xclip, unsigned yclip,
                          unsigned short const *font, char const *msg,
                          unsigned row);
+
+void printchar(void volatile *fb, unsigned short const *font,
+               char ch, unsigned *rowp, unsigned *colp);
+void printstr(void volatile *fb, unsigned short const *font,
+              char const *str, unsigned *rowp, unsigned *colp);
 
 #endif

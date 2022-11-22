@@ -30,12 +30,13 @@ CDI4DC=cdi4dc
 ELF=aica_test.elf
 TARGET=aica_test.cdi
 
-.PHONY: run all
+.PHONY: run all clean arm7_fw
 
 all: $(TARGET)
 
 clean:
-	rm -f $(ELF) init.o main.o romfont.o maple.o
+	rm -f $(ELF) init.o main.o romfont.o maple.o arm7_fw.h
+	$(MAKE) -C arm clean
 
 init.o: init.s
 	$(AS) -little -o init.o init.s
@@ -43,7 +44,7 @@ init.o: init.s
 $(ELF): init.o main.o romfont.o maple.o
 	$(CC) -Wl,-e_start,-Ttext,0x8c010000 $^ -o $(ELF) -nostartfiles -nostdlib -lgcc
 
-main.o: main.c pvr.h tmu.h romfont.h maple.h
+main.o: main.c pvr.h tmu.h romfont.h maple.h memory.h arm7_fw.h
 	$(CC) -c $< -nostartfiles -nostdlib
 
 romfont.o: romfont.c romfont.h
@@ -71,3 +72,8 @@ IP.BIN:
 $(TARGET): filesystem.iso
 	$(CDI4DC) $< $@
 
+arm/arm7_fw.bin: arm/*.s arm/*.c
+	$(MAKE) -C arm
+
+arm7_fw.h: arm/arm7_fw.bin
+	./embed_c_code.py -i arm/arm7_fw.bin -o $@ -h ARM7_FW_H -t arm7fw
