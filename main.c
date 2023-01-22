@@ -397,10 +397,13 @@ int dcmain(int argc, char **argv) {
     *TMU_TCOR0 = 49;
     *TMU_TCNT0 = 49;
     SH4_IPR[0] = 0xf000;       // set TMU interrupts to highest priority
-    /* *TMU_TSTR = TMU_TSTR_STR0; //re-enable TMU */
+    *TMU_TSTR = TMU_TSTR_STR0; //re-enable TMU
 
     int btns, btns_prev = 0;
     int paused = 1;
+    unsigned start_ticks, prev_state;
+    int state_times[4] = { -1, -1, -1, -1 };
+    int is_playing = 0;
     while (!((btns = ~get_controller_buttons()) & (1 << 3))) {
         if (btns & (1 << 2) && !(btns_prev & (1 << 2))) {
             // A button
@@ -409,6 +412,21 @@ int dcmain(int argc, char **argv) {
             /* paused = !paused; */
             silence();
             playtone(rates);
+            start_ticks = ticks;
+            get_chan_state(0, &prev_state, NULL, NULL);
+            is_playing = 1;
+            state_times[0] = -1;
+            state_times[1] = -1;
+            state_times[2] = -1;
+            state_times[3] = -1;
+            state_times[prev_state] = 0;
+        }
+
+        unsigned cur_state;
+        get_chan_state(0, &cur_state, NULL, NULL);
+        if (is_playing && cur_state != prev_state) {
+            state_times[cur_state] = ticks - start_ticks;
+            prev_state = cur_state;
         }
 
         if ((btns & (1 << 7)) && !(btns_prev & (1 << 7))) {
@@ -436,6 +454,11 @@ int dcmain(int argc, char **argv) {
         if (btns & (1 << 1) && !(btns_prev & (1 << 1))) {
             // B button
             silence();
+            is_playing = 0;
+            state_times[0] = -1;
+            state_times[1] = -1;
+            state_times[2] = -1;
+            state_times[3] = -1;
         }
 
         /* if (btns & (1 << 1) && !(btns_prev & (1 << 1))) { */
@@ -457,6 +480,10 @@ int dcmain(int argc, char **argv) {
         printstr(cur_framebuffer, font[0], "attenuation: ", &row, &col);
         printstr(cur_framebuffer, font[0], hexstr(atten), &row, &col);
 
+        row++;
+        printstr(cur_framebuffer, font[0], "cur_state: ", &row, &col);
+        printstr(cur_framebuffer, font[0], hexstr(cur_state), &row, &col);
+
         unsigned rateno;
         for (rateno = 0; rateno < 5; rateno++) {
             unsigned short *cur_font = (rateno == cursor ? font[1] : font[0]);
@@ -467,6 +494,39 @@ int dcmain(int argc, char **argv) {
             col = MAX_CHARS_X - 12;
             printstr(cur_framebuffer, cur_font, hexstr(rates[rateno]), &row, &col);
         }
+
+        row++;
+        col = 4;
+        printstr(cur_framebuffer, font[0], "attack: ", &row, &col);
+        if (is_playing && state_times[0] != -1) {
+            col = MAX_CHARS_X - 12;
+            printstr(cur_framebuffer, font[0], hexstr(state_times[0]), &row, &col);
+        }
+        row++;
+        col = 4;
+        printstr(cur_framebuffer, font[0], "decay: ", &row, &col);
+        if (is_playing && state_times[1] != -1) {
+            col = MAX_CHARS_X - 12;
+            printstr(cur_framebuffer, font[0], hexstr(state_times[1]), &row, &col);
+        }
+        row++;
+        col = 4;
+        printstr(cur_framebuffer, font[0], "sustain: ", &row, &col);
+        if (is_playing && state_times[2] != -1) {
+            col = MAX_CHARS_X - 12;
+            printstr(cur_framebuffer, font[0], hexstr(state_times[2]), &row, &col);
+        }
+        row++;
+        col = 4;
+        printstr(cur_framebuffer, font[0], "release: ", &row, &col);
+        if (is_playing && state_times[3] != -1) {
+            col = MAX_CHARS_X - 12;
+            printstr(cur_framebuffer, font[0], hexstr(state_times[3]), &row, &col);
+        }
+
+        row++;
+        col = 8;
+        printstr(cur_framebuffer, font[0], hexstr(ticks), &row, &col);
 
         /* printstr(cur_framebuffer, font, "MASTER VOLUME: ", &row, &col); */
         /* printstr(cur_framebuffer, font, hexstr(master_vol), &row, &col); */
